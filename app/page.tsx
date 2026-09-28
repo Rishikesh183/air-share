@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import NearbyDevices from "@/components/NearbyDevices";
 import { ensureSignedIn, isFirebaseConfigured } from "@/lib/firebase";
 import {
   RoomFullError,
@@ -75,7 +76,14 @@ export default function HomePage() {
         </div>
       )}
 
+      {configured && <NearbyDevices />}
+
       <section className="space-y-3">
+        {configured && (
+          <p className="text-center text-xs uppercase tracking-widest text-zinc-600">
+            Or use a room code
+          </p>
+        )}
         <button
           type="button"
           onClick={handleCreate}

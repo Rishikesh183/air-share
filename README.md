@@ -106,6 +106,18 @@ Two browser tabs work, with one in a private/incognito window so the two get sep
 - **Transfer** — `META → READY → binary chunks → DONE → ACK`, 16 KB chunks, paused above 1 MB of `bufferedAmount` and resumed on `bufferedamountlow`. Limit 25 MB.
 - **Privacy** — every photo is redrawn through a canvas and re-encoded as JPEG (quality 0.92) before sending, which drops EXIF including GPS. A file the browser cannot decode (HEIC on most desktop browsers) surfaces "Unsupported format" rather than crashing.
 
+### Nearby devices
+
+The home screen lists other devices that have GestureDrop open on the same network. Tap one to send an invite. They get an Allow / Decline popup, and on Allow both devices land in a new room.
+
+- `GET /api/lobby` hashes the caller's public IP (IPv6 grouped by /64) with `LOBBY_SALT` into a 16-hex lobby id. The raw IP is never stored.
+- Presence lives at `lobby/{id}/{uid}` = `{name, joinedAt}` and is removed on disconnect.
+- Invites live at `invites/{toUid}/{fromUid}`. Rules only allow an invite when both devices are currently in the same lobby, and only the invitee can set `status`. Unanswered invites expire after 30 s and their room is closed.
+- Only devices with the site open appear. A browser can't discover or wake a phone that isn't running the page.
+- Two devices on the same Wi-Fi can still land in different lobbies if one uses IPv4 and the other IPv6. The room code is the fallback.
+
+`LOBBY_SALT` is server-only (no `NEXT_PUBLIC_` prefix). Set it to any long random string, e.g. `openssl rand -hex 32`.
+
 ### Edge cases handled
 
 - Peer drops mid-grab or mid-transfer → both sides reset, the sender keeps the photo.

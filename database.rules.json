@@ -2,51 +2,113 @@
   "rules": {
     ".read": false,
     ".write": false,
-
     "rooms": {
       "$code": {
         ".read": "auth != null",
-
         ".write": "auth != null && ( !data.exists() || data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid || (!data.child('guestUid').exists() || data.child('guestUid').val() === null) )",
-
         ".validate": "$code.matches(/^[0-9]{4}$/)",
-
         "hostUid": {
           ".validate": "newData.isString() && (!data.exists() || data.val() === newData.val() || newData.val() === auth.uid)"
         },
-
         "guestUid": {
           ".validate": "newData.isString() && newData.val() === auth.uid && (!data.exists() || data.val() === null || data.val() === auth.uid)"
         },
-
-        "createdAt": { ".validate": "newData.isNumber()" },
-        "updatedAt": { ".validate": "newData.isNumber()" },
-
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
         "offer": {
           ".validate": "newData.hasChildren(['type', 'sdp']) && root.child('rooms').child($code).child('hostUid').val() === auth.uid",
-          "type": { ".validate": "newData.isString()" },
-          "sdp": { ".validate": "newData.isString()" },
-          "$other": { ".validate": false }
+          "type": {
+            ".validate": "newData.isString()"
+          },
+          "sdp": {
+            ".validate": "newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "answer": {
           ".validate": "newData.hasChildren(['type', 'sdp']) && root.child('rooms').child($code).child('guestUid').val() === auth.uid",
-          "type": { ".validate": "newData.isString()" },
-          "sdp": { ".validate": "newData.isString()" },
-          "$other": { ".validate": false }
+          "type": {
+            ".validate": "newData.isString()"
+          },
+          "sdp": {
+            ".validate": "newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "hostCandidates": {
           ".validate": "root.child('rooms').child($code).child('hostUid').val() === auth.uid || !newData.exists()",
-          "$candidate": { ".validate": "newData.hasChild('candidate') || newData.hasChildren()" }
+          "$candidate": {
+            ".validate": "newData.hasChild('candidate') || newData.hasChildren()"
+          }
         },
-
         "guestCandidates": {
           ".validate": "root.child('rooms').child($code).child('guestUid').val() === auth.uid || !newData.exists()",
-          "$candidate": { ".validate": "newData.hasChild('candidate') || newData.hasChildren()" }
+          "$candidate": {
+            ".validate": "newData.hasChild('candidate') || newData.hasChildren()"
+          }
         },
-
-        "$other": { ".validate": false }
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "lobby": {
+      "$lobbyId": {
+        ".read": "auth != null",
+        ".validate": "$lobbyId.matches(/^[a-f0-9]{16}$/)",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren([\"name\", \"joinedAt\"])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+          },
+          "joinedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "invites": {
+      "$toUid": {
+        ".read": "auth != null && auth.uid === $toUid",
+        "$fromUid": {
+          ".read": "auth != null && auth.uid === $fromUid",
+          ".write": "auth != null && (auth.uid === $fromUid || (auth.uid === $toUid && !newData.exists()))",
+          ".validate": "newData.hasChildren([\"fromUid\", \"fromName\", \"code\", \"lobby\", \"createdAt\", \"status\"]) && root.child(\"lobby\").child(newData.child(\"lobby\").val()).child($toUid).exists() && root.child(\"lobby\").child(newData.child(\"lobby\").val()).child($fromUid).exists()",
+          "fromUid": {
+            ".validate": "newData.val() === $fromUid"
+          },
+          "fromName": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+          },
+          "code": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}$/)"
+          },
+          "lobby": {
+            ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{16}$/)"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "status": {
+            ".write": "auth != null && auth.uid === $toUid",
+            ".validate": "newData.isString() && (newData.val() === \"pending\" || newData.val() === \"accepted\" || newData.val() === \"declined\")"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
       }
     }
   }
