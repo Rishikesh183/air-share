@@ -60,6 +60,9 @@ export default function RoomClient({ code }: { code: string }) {
   const [incoming, setIncoming] = useState<IncomingDone | null>(null);
   const receiverRef = useRef<FileReceiver | null>(null);
   const acceptedPeerRef = useRef(false); // accept prompt only on the first send
+  // Mirrors incomingMeta so the message handler can stay referentially stable:
+  // the peer connection effect depends on it and must not remount per photo.
+  const incomingMetaRef = useRef<FileMeta | null>(null);
 
   const channelRef = useRef<RTCDataChannel | null>(null);
   const [channelOpen, setChannelOpen] = useState(false);
@@ -71,6 +74,11 @@ export default function RoomClient({ code }: { code: string }) {
       clearTimeout(releaseTimerRef.current);
       releaseTimerRef.current = null;
     }
+  }, []);
+
+  const applyIncomingMeta = useCallback((meta: FileMeta | null) => {
+    incomingMetaRef.current = meta;
+    setIncomingMeta(meta);
   }, []);
 
   const resetSend = useCallback(
@@ -87,13 +95,16 @@ export default function RoomClient({ code }: { code: string }) {
     [clearReleaseTimer]
   );
 
-  const resetReceive = useCallback((message?: string) => {
-    receiverRef.current = null;
-    setRecvPhase("idle");
-    setIncomingMeta(null);
-    setRecvBytes(0);
-    if (message) setNotice(message);
-  }, []);
+  const resetReceive = useCallback(
+    (message?: string) => {
+      receiverRef.current = null;
+      setRecvPhase("idle");
+      applyIncomingMeta(null);
+      setRecvBytes(0);
+      if (message) setNotice(message);
+    },
+    [applyIncomingMeta]
+  );
 
   /* ---------- membership ---------- */
 
@@ -181,7 +192,7 @@ export default function RoomClient({ code }: { code: string }) {
           // A second grab replaces whatever was pending.
           receiverRef.current = null;
           setRecvBytes(0);
-          setIncomingMeta(meta);
+          applyIncomingMeta(meta);
           setRecvPhase(acceptedPeerRef.current ? "waiting-release" : "prompting");
           setNotice(null);
           break;
@@ -213,13 +224,16 @@ export default function RoomClient({ code }: { code: string }) {
           receiverRef.current = null;
           setIncoming({ meta: receiver.meta, blob, url: URL.createObjectURL(blob) });
           setRecvPhase("done");
-          setIncomingMeta(null);
+          applyIncomingMeta(null);
           if (channel) sendControl(channel, { kind: "ACK", id: message.id });
           break;
         }
 
         case "CANCEL": {
-          if (receiverRef.current?.meta.id === message.id || incomingMeta?.id === message.id) {
+          if (
+            receiverRef.current?.meta.id === message.id ||
+            incomingMetaRef.current?.id === message.id
+          ) {
             resetReceive(message.reason || "The sender cancelled.");
           }
           if (sendIdRef.current === message.id) {
@@ -235,9 +249,10 @@ export default function RoomClient({ code }: { code: string }) {
         }
       }
     },
-    // streamPendingFile is declared below and read through a ref-free closure at call time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clearReleaseTimer, incomingMeta, resetReceive, resetSend]
+    // streamPendingFile reads its work from refs at call time, so it needs no dep here.
+    // This callback must stay referentially stable: the peer connection effect depends on
+    // it, and recreating it would tear down the live connection mid-transfer.
+    [applyIncomingMeta, clearReleaseTimer, resetReceive, resetSend]
   );
 
   const streamPendingFileRef = useRef<() => Promise<void>>(async () => {});
@@ -382,20 +397,22 @@ export default function RoomClient({ code }: { code: string }) {
 
   const declineIncoming = useCallback(() => {
     const channel = channelRef.current;
-    if (channel && incomingMeta) {
-      sendControl(channel, { kind: "REJECT", id: incomingMeta.id, reason: "The receiver declined." });
+    const meta = incomingMetaRef.current;
+    if (channel && meta) {
+      sendControl(channel, { kind: "REJECT", id: meta.id, reason: "The receiver declined." });
     }
     resetReceive("Photo declined.");
-  }, [incomingMeta, resetReceive]);
+  }, [resetReceive]);
 
   const handleRelease = useCallback(() => {
     const channel = channelRef.current;
+    const incomingMeta = incomingMetaRef.current;
     if (!channel || channel.readyState !== "open" || !incomingMeta) return;
     receiverRef.current = new FileReceiver(incomingMeta);
     setRecvBytes(0);
     setRecvPhase("receiving");
     sendControl(channel, { kind: "READY", id: incomingMeta.id });
-  }, [incomingMeta]);
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (!incoming) return;
